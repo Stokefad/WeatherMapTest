@@ -21,25 +21,34 @@ class GeoVM {
         return "https://api.openweathermap.org/data/2.5/weather?lat=\(lat)&lon=\(lon)&APPID=e72ca729af228beabd5d20e3b7749713"
     }
     
-    public func getWeather(lon : Double, lat : Double, callback : @escaping (WeatherCoordinate) -> ()) {
+    public func getWeather(lon : Double, lat : Double, span : Double, callback : @escaping (WeatherCoordinate) -> ()) {
         Alamofire.request(GeoVM.shared.returnURL(lon: lon, lat: lat), method: .post).responseJSON { (response) in
             guard let data = response.result.value as? Dictionary<String, Any> else {
                 return
             }
             
-            guard let main = data["main"] as? Dictionary<String, Any> else {
+            guard let main = data["main"] as? Dictionary<String, Any>, let weatherList = data["weather"] as? Array<Any> else {
+                return
+            }
+            
+            guard let weather = weatherList[0] as? Dictionary<String, Any> else {
                 return
             }
             
             let temp = main["temp_max"] as? Double
+            let desc = weather["description"] as! String
             
-          //  print(temp)
+          
             if let temp = temp {
                 let weatherCoord = WeatherCoordinate()
                 weatherCoord.dateUpdated = Date()
                 weatherCoord.lat = lat
                 weatherCoord.lon = lon
                 weatherCoord.temp = temp
+                weatherCoord.span = span
+                weatherCoord.weather = desc
+                
+                GeoVM.shared.saveWeather(weather: weatherCoord)
                 
                 callback(weatherCoord)
             }

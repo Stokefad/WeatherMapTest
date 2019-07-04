@@ -12,9 +12,11 @@ import RealmSwift
 
 class WeatherCoordinate : Object {
     
-    dynamic var lat = Double()
-    dynamic var lon = Double()
-    dynamic var dateUpdated = Date()
-    dynamic var temp = Double()
+    @objc dynamic var lon = Double()
+    @objc dynamic var lat = Double()
+    @objc dynamic var dateUpdated = Date()
+    @objc dynamic var temp = Double()
+    @objc dynamic var span = Double()
+    @objc dynamic var weather = String()
     
 }

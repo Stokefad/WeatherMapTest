@@ -19,26 +19,30 @@ class ViewController: UIViewController {
     
     var prevSpan = Double()
     
-    let queue = DispatchQueue(label: "fds", qos: .userInteractive, attributes: .concurrent)
+    let queue = DispatchQueue(label: "queue.loadweather", qos: .userInteractive, attributes: .concurrent)
     
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view.
         mapView.delegate = self
+        mapView.setRegion(MKCoordinateRegion(center: CLLocationCoordinate2DMake(55.7, 37.5), latitudinalMeters: CLLocationDistance(exactly: 30000)!, longitudinalMeters: CLLocationDistance(exactly: 130000)!), animated: true)
         configurePolygon()
         getWeatherData()
     }
     
-    private func addAnnotation(title : String, lat : Double, lon : Double) {
+    private func addAnnotation(title : String, subtitle : String, lat : Double, lon : Double) {
         let annotation = MKPointAnnotation()
         annotation.title = title
         annotation.coordinate = CLLocationCoordinate2DMake(CLLocationDegrees(exactly: lat)!, CLLocationDegrees(exactly: lon)!)
+        annotation.subtitle = subtitle
         mapView.addAnnotation(annotation)
+        
     }
     
     private func getWeatherData() {
         let center = mapView.region.center
         var fitCounter = 0
+        var annotationCounter = 0
         
         let maxLatCoordOne = center.latitude + mapView.region.span.latitudeDelta / 2
         let maxLatCoordTwo = center.latitude - mapView.region.span.latitudeDelta / 2
@@ -48,9 +52,10 @@ class ViewController: UIViewController {
         
         
         let weatherObjects = GeoVM.shared.retrieveWeather()
-        
+       
         for obj in weatherObjects {
-            if obj.lat < maxLatCoordOne, obj.lat < maxLatCoordTwo, obj.lon < maxLonCoordOne, obj.lon < maxLonCoordTwo, obj.dateUpdated.timeIntervalSince1970 + 30 * 60 * 1000 > Date().timeIntervalSince1970 {
+            
+            if obj.lat < maxLatCoordOne, obj.lat > maxLatCoordTwo, obj.lon < maxLonCoordOne, obj.lon > maxLonCoordTwo, obj.dateUpdated.timeIntervalSince1970 + 30 * 60 * 1000 > Date().timeIntervalSince1970, mapView.region.span.latitudeDelta * 2 > obj.span, mapView.region.span.latitudeDelta < obj.span * 2 {
                 fitCounter += 1
             }
             if obj.dateUpdated.timeIntervalSince1970 + 30 * 60 * 1000 < Date().timeIntervalSince1970 {
@@ -58,9 +63,17 @@ class ViewController: UIViewController {
             }
         }
         
-        if fitCounter > 15 {
+        if fitCounter > 20 {
             for obj in weatherObjects {
-                addAnnotation(title: String(describing: obj.temp), lat: obj.lat, lon: obj.lon)
+                if obj.lat < maxLatCoordOne, obj.lat > maxLatCoordTwo, obj.lon < maxLonCoordOne, obj.lon > maxLonCoordTwo, obj.dateUpdated.timeIntervalSince1970 + 30 * 60 * 1000 > Date().timeIntervalSince1970, mapView.region.span.latitudeDelta * 2 > obj.span, mapView.region.span.latitudeDelta < obj.span * 2 {
+                    let title = Int(obj.temp - 270) > 0 ? "+\(Int(obj.temp - 270))" : "-\(Int(obj.temp - 270))"
+                    addAnnotation(title: title, subtitle: obj.weather, lat: obj.lat, lon: obj.lon)
+                    annotationCounter += 1
+                    if annotationCounter == 25 {
+                        break
+                    }
+                    
+                }
             }
         }
         else {
@@ -126,13 +139,14 @@ class ViewController: UIViewController {
     }
     
     private func showWeatherAPI() {
-        print(latCoords.count * longCoords.count)
         queue.sync { [unowned self] in
             for lat in self.latCoords {
                 for lon in self.longCoords {
-                    GeoVM.shared.getWeather(lon: lon, lat: lat, callback: { (weatherCoord) in
-                        self.addAnnotation(title: "\(weatherCoord.temp)", lat: lat, lon: lon)
-                        print(self.mapView.annotations.count)
+                    GeoVM.shared.getWeather(lon: lon, lat: lat, span: mapView.region.span.latitudeDelta, callback: { [unowned self] (weatherCoord) in
+                        if self.mapView.annotations.count < 26 {
+                            let title = Int(weatherCoord.temp - 270) > 0 ? "+\(Int(weatherCoord.temp - 270))" : "-\(Int(weatherCoord.temp - 270))"
+                            self.addAnnotation(title: title, subtitle: weatherCoord.weather, lat: lat, lon: lon)
+                        }
                     })
                 }
             }
@@ -161,4 +175,42 @@ extension ViewController : MKMapViewDelegate {
         configurePolygon()
         getWeatherData()
     }
+    
+    func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+        guard !(annotation is MKUserLocation) else {
+            return nil
+        }
+        
+        // Better to make this class property
+        let annotationIdentifier = "CustomAnnot"
+        
+        var annotationView: MKAnnotationView?
+        if let dequeuedAnnotationView = mapView.dequeueReusableAnnotationView(withIdentifier: annotationIdentifier) {
+            annotationView = dequeuedAnnotationView
+            annotationView?.annotation = annotation
+        }
+        else {
+            let av = MKAnnotationView(annotation: annotation, reuseIdentifier: annotationIdentifier)
+            av.rightCalloutAccessoryView = UIButton(type: .detailDisclosure)
+            annotationView = av
+        }
+        
+        if let annotationView = annotationView {
+            
+            annotationView.canShowCallout = true
+            if annotation.subtitle!!.contains("rain") {
+                annotationView.image = UIImage(named: "rainy")
+            }
+            else if annotation.subtitle!!.contains("clear") {
+                annotationView.image = UIImage(named: "sunny")
+            }
+            else if annotationView.image == UIImage(named: "cloud") {
+                annotationView.image = UIImage(named: "cloudy")
+            }
+        }
+        
+        return annotationView
+        
+    }
+ 
 }
